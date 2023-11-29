@@ -64,19 +64,22 @@ class StorageManagement(Resource):
         else:
             return {"note": "找不到指定物料"}, 404
 
-#%% 產品製造
+#%% 定義一個繼承自 Resource 的 ProductionManagement 類別，處理 /storage/<string:name>/<int:amounts> 路徑的 GET 請求
 class ProductionManagement(Resource):
-    def post(self, name, amounts):
+    def get(self, name, amounts):
+        # 檢查指定物料是否為產品
         if "Product" not in name:
             return {"note": "指定物料並非產品"}
         
-        for material in storage:
-            if material["Name"] == name:
+        # 在 recipes 中查找指定產品
+        for product in recipes:
+            if product["Name"] == name:
                 break
         else:
             return {"note": "查無該產品"}
         
-        errorCode = self._production(name,amounts)
+        # 調用 _production 方法進行製造，並根據回傳的錯誤碼提供相應的訊息
+        errorCode = self._production(name, amounts)
         if errorCode == 0:
             return {"note": "製造完成"}
         elif errorCode == -1:
@@ -84,28 +87,38 @@ class ProductionManagement(Resource):
         elif errorCode == -2:
             return {"note": "原物料數量不足"}
             
-    def _production(self,name,amounts):
-        currentProductIdx = None
-        currentMaterialAIdx= None
-        for idx in range(len(storage)):
-            material = storage[idx]
-            if material["Name"] == name:
-                currentProductIdx = idx
-            if material["Name"] == "Material-A":
-                currentMaterialAIdx= idx
-            
-            if currentProductIdx != None and currentMaterialAIdx!= None:
+    def _production(self, name, amounts):
+        # 在 recipes 中找到指定產品的配方
+        productRecipe = None
+        for product in recipes:
+            if product["Name"] == name:
+                productRecipe = product
+   
+        # 檢查原物料庫存是否足夠
+        for productMaterial in productRecipe["Recipe"]:
+            for material in storage:
+                if material["Name"] != productMaterial["Name"]:
+                    continue
+                
+                if material["Amounts"] < amounts * productMaterial["Amounts"]:
+                    return -2                
                 break
-        else:
-            return -1
-        
-        currentMaterialAAmounts = storage[currentMaterialAIdx]["Amounts"] - amounts * 1
-        if currentMaterialAAmounts < 0:
-            return -2
-        else:
-            storage[currentProductIdx]["Amounts"] += amounts
-            storage[currentMaterialAIdx]["Amounts"] = currentMaterialAAmounts
-            return 0
+            else:
+                return -1
+            
+        # 扣除原物料庫存
+        for productMaterial in productRecipe["Recipe"]:
+            for material in storage:
+                if material["Name"] == productMaterial["Name"]:
+                    material["Amounts"] -= amounts * productMaterial["Amounts"]
+                    break
+                    
+        # 更新產品庫存
+        for material in storage:
+            if material["Name"] == name:
+                material["Amounts"] = amounts
+                
+        return 0
             
 #%% 將 HelloWorld、Storage、StorageManagement 類別加入 API 路由
 api.add_resource(HelloWorld, "/")
